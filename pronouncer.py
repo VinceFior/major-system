@@ -32,6 +32,7 @@ class Pronouncer(object):
             strip_stress = self.strip_stress
         upper_word = word.upper() # our dictionary is all uppercase
         if not upper_word in self.pronunciation_dictionary:
+            print('Do not know how to pronounce \'{0}\''.format(word))
             return None
         phonemes_list = self.pronunciation_dictionary[upper_word]
         if strip_stress:
