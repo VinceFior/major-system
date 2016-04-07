@@ -19,6 +19,7 @@ class Pronouncer(object):
         You can also set whether this Pronouncer should automatically strip out stress markers.
         '''
         self.pronunciation_dictionary = self._get_pronunciation_dict(pro_dict_file, files_encoding)
+        # in case anyone wants the set of phonemes we use, we directly get the set here
         self.phonemes_set = self._get_phonemes(phonemes_file, files_encoding)
         self.strip_stress = strip_stress
 

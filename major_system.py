@@ -31,7 +31,8 @@ def main():
     # Demonstrate RandomGreedyEncoder
     print('\n=== Demonstrating the RandomGreedyEncoder class ===')
     random_greedy_encoder = RandomGreedyEncoder(pronouncer = pronouncer, max_word_length = 2)
-    numbers = ['123', '123', '451', '451', '12345', '0123456789']
+    numbers = ['123', '123', '451', '451', '12345', '0123456789',
+               '31415926535897932384626433832795028841971693993751']
     for max_word_length in [1, 2, 3, 10]:
         print('-- Encoding with max_word_length {0} --'.format(max_word_length))
         for number in numbers:

@@ -105,8 +105,9 @@ class GreedyEncoder(NumberEncoder):
         '''
         super(GreedyEncoder, self).__init__(pronouncer = pronouncer,
             phoneme_to_digit_dict = phoneme_to_digit_dict)
-        # get an accurate upper limit on how many digits could possibly be in a word
+        # with the default encoding, the maximum number of digits in any word is 19
         max_digits_per_word = 19
+        # if we were given an unusual max_word_length, set it to max_digits_per_word
         if max_word_length == None or max_word_length < 1 or max_word_length > max_digits_per_word:
             max_word_length = max_digits_per_word
         self.max_word_length = max_word_length
@@ -125,7 +126,7 @@ class GreedyEncoder(NumberEncoder):
         Encodes the given number (string of digits) as a series of words. Greedily groups digits
         in chunks as long as possible, up to max_word_length (if given, otherwise
         self.max_word_length). Once a length is found that produces at least one word, the encoder
-        randomly picks a word of that length.
+        selects a word of that length via self.select_encoding().
         '''
         # if not given max_word_length, use class default
         if max_word_length == None:
@@ -140,7 +141,7 @@ class GreedyEncoder(NumberEncoder):
                 number_chunk = number[encoded_index : encoded_index + chunk_length]
                 chunk_encodings = self._encode_number_chunk(number_chunk)
                 if len(chunk_encodings) > 0:
-                    # randomly sample one encoding from chunk_encodings
+                    # select one encoding from chunk_encodings
                     chunk_encoding = self.select_encoding(chunk_encodings)
                     has_found_encoding = True
                     encodings += [chunk_encoding]
@@ -162,12 +163,12 @@ class GreedyEncoder(NumberEncoder):
         possible_phonemes = []
         for digit in number_chunk:
             possible_phonemes += [tuple([phoneme for phoneme in self.phoneme_to_digit_dict
-            if digit == self.phoneme_to_digit_dict[phoneme]])]
+                                         if digit == self.phoneme_to_digit_dict[phoneme]])]
         # check every possible phoneme sequence in self.phonemes_to_words_dict and add every word
         possible_encodings = []
         for phoneme_sequence in product(*possible_phonemes):
             if phoneme_sequence in self.phonemes_to_words_dict:
-                possible_encodings += [self.phonemes_to_words_dict[phoneme_sequence]]
+                possible_encodings += self.phonemes_to_words_dict[phoneme_sequence]
         return possible_encodings
 
     def _get_phonemes_to_words_dict(self):
@@ -188,7 +189,11 @@ class GreedyEncoder(NumberEncoder):
             for pronunciation in pronunciations:
                 included_phonemes = tuple([phoneme for phoneme in pronunciation
                                            if phoneme in self.phoneme_to_digit_dict])
-                phonemes_to_words_dict[included_phonemes] = word
+                # if we've already included a word for this phoneme sequence, extend its list
+                if included_phonemes in phonemes_to_words_dict:
+                    phonemes_to_words_dict[included_phonemes] += [word]
+                else:
+                    phonemes_to_words_dict[included_phonemes] = [word]
         return phonemes_to_words_dict
 
     def _get_max_digits_per_word(self):
