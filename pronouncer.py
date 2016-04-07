@@ -9,6 +9,7 @@ class Pronouncer(object):
     Pronouncer knows how to pronounce words. It will even tell you how a word is pronounced,
     if you ask nicely.
     '''
+
     def __init__(self, pro_dict_file = 'phonemes/cmudict-07b.txt', 
         phonemes_file = 'phonemes/cmudict-0-7b-phones.txt', files_encoding = 'latin-1',
         strip_stress = True):
@@ -36,7 +37,7 @@ class Pronouncer(object):
             return None
         phonemes_list = self.pronunciation_dictionary[upper_word]
         if strip_stress:
-            phonemes_list = self._strip_phonemes_stress(phonemes_list)
+            phonemes_list = self.strip_phonemes_stress(phonemes_list)
         return phonemes_list
 
     def _get_pronunciation_dict(self, dict_filename, encoding, words_to_include = None):
@@ -86,7 +87,7 @@ class Pronouncer(object):
                 phonemes_dictionary.add(phoneme_and_type[0])
         return phonemes_dictionary
 
-    def _strip_phonemes_stress(self, phonemes_list):
+    def strip_phonemes_stress(self, phonemes_list):
         '''
         Given a list of list of phonemes, strips out any stress markers (trailing digit 0, 1, or 2).
         Ex., given [['AH0', 'B', 'Y', 'UW', 'Z']], returns [['AH', 'B', 'Y', 'UW', 'Z']].
