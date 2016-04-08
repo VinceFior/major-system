@@ -2,8 +2,11 @@
 # By Vincent Fiorentini and Megan Shao, (c) 2016.
 
 from pronouncer import Pronouncer
+from ngram_model import NgramModel
 from random import sample # for RandomGreedyEncoder
 from itertools import product # for RandomGreedyEncoder
+from nltk.corpus import brown # for RandomGreedyEncoder
+from collections import Counter # for RandomGreedyEncoder
 
 class NumberEncoder(object):
     '''
@@ -100,8 +103,8 @@ class GreedyEncoder(NumberEncoder):
     def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
         max_word_length = 2):
         '''
-        Initializes the RandomGreedyEncoder. The encoder will greedily group digits to make words
-        as long as possible (where the length of a word refers to the number of digits it encodes).
+        Initializes the GreedyEncoder. The encoder will greedily group digits to make words as long
+        as possible (where the length of a word refers to the number of digits it encodes).
         '''
         super(GreedyEncoder, self).__init__(pronouncer = pronouncer,
             phoneme_to_digit_dict = phoneme_to_digit_dict)
@@ -114,7 +117,7 @@ class GreedyEncoder(NumberEncoder):
         # to aid encode_number(), we set up a mapping from phoneme sequences to words
         self.phonemes_to_words_dict = self._get_phonemes_to_words_dict()
 
-    def select_encoding(self, encodings):
+    def _select_encoding(self, encodings):
         '''
         Selects one encoding from the given list of possible encodings.
         '''
@@ -126,7 +129,7 @@ class GreedyEncoder(NumberEncoder):
         Encodes the given number (string of digits) as a series of words. Greedily groups digits
         in chunks as long as possible, up to max_word_length (if given, otherwise
         self.max_word_length). Once a length is found that produces at least one word, the encoder
-        selects a word of that length via self.select_encoding().
+        selects a word of that length via self._select_encoding().
         '''
         # if not given max_word_length, use class default
         if max_word_length == None:
@@ -142,7 +145,7 @@ class GreedyEncoder(NumberEncoder):
                 chunk_encodings = self._encode_number_chunk(number_chunk)
                 if len(chunk_encodings) > 0:
                     # select one encoding from chunk_encodings
-                    chunk_encoding = self.select_encoding(chunk_encodings)
+                    chunk_encoding = self._select_encoding(chunk_encodings)
                     has_found_encoding = True
                     encodings += [chunk_encoding]
                     encoded_index += chunk_length
@@ -171,7 +174,7 @@ class GreedyEncoder(NumberEncoder):
                 possible_encodings += self.phonemes_to_words_dict[phoneme_sequence]
         return possible_encodings
 
-    def _get_phonemes_to_words_dict(self):
+    def _get_phonemes_to_words_dict(self, vocabulary = None):
         '''
         Returns a dictionary that maps every sequence (tuple) of phonemes (that are included in
         self.phoneme_to_digit_dict) to a list of all words in
@@ -181,6 +184,9 @@ class GreedyEncoder(NumberEncoder):
         phonemes_to_words_dict = dict()
         for word, pronunciations in self.pronouncer.pronunciation_dictionary.items():
             pronunciations = self.pronouncer.strip_phonemes_stress(pronunciations)
+            # if this word is not in the vocabulary, do not include this word
+            if vocabulary != None and word.lower() not in vocabulary:
+                continue
             # if any of the pronunciations yield different decodings, do not include this word
             possible_decodings = self._decode_phonemes_list(pronunciations)
             if not all(decoding == possible_decodings[0] for decoding in possible_decodings):
@@ -217,11 +223,63 @@ class GreedyEncoder(NumberEncoder):
 
 class RandomGreedyEncoder(GreedyEncoder):
     '''
-    RandomGreedyEncoder is a GreedyEncoder that selects which encoding to use randomly.
+    RandomGreedyEncoder is a GreedyEncoder that selects which encoding from the vocabulary to use
+    randomly.
     '''
 
-    def select_encoding(self, encodings):
+    def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
+        max_word_length = 2, max_vocab_size = None):
+        '''
+        Initializes the RandomGreedyEncoder. The encoder will greedily group digits to make words
+        as long as possible (where the length of a word refers to the number of digits it encodes).
+        The randomly selected word will be from the max_vocab_size most common words in both the 
+        CMU list and the Brown corpus.
+        '''
+        super(RandomGreedyEncoder, self).__init__(pronouncer = pronouncer,
+            phoneme_to_digit_dict = phoneme_to_digit_dict, max_word_length = max_word_length)
+
+        if max_vocab_size != None: 
+            cmu_words = set([word.lower() for word in pronouncer.pronunciation_dictionary.keys()])
+            words = []
+            for category in brown.categories():
+                text = brown.words(categories=category)
+                words += [word.lower() for word in list(text) if word in cmu_words]
+            vocabulary = set([word for word, count in Counter(words).most_common(max_vocab_size)])
+            self.phonemes_to_words_dict = self._get_phonemes_to_words_dict(vocabulary)
+
+    def _select_encoding(self, encodings):
         '''
         Randomly selects one encoding from the given encodings.
         '''
         return sample(encodings, 1)[0]
+
+
+class UnigramGreedyEncoder(GreedyEncoder):
+    '''
+    UnigramGreedyEncoder is a GreedyEncoder that selects the most common encoding according to a
+    unigram model.
+    '''
+
+    def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
+        max_word_length = 2):
+        '''
+        Initializes the UnigramGreedyEncoder. The encoder will greedily group digits to make words
+        as long as possible (where the length of a word refers to the number of digits it encodes).
+        '''
+        super(UnigramGreedyEncoder, self).__init__(pronouncer = pronouncer,
+            phoneme_to_digit_dict = phoneme_to_digit_dict, max_word_length = max_word_length)
+
+        self.unigram = NgramModel(1)
+
+    def _select_encoding(self, encodings):
+        '''
+        Selects the most common encoding according to unigram probabilities.
+        '''
+        max_prob = -float('inf')
+        max_prob_encoding = None
+        for encoding in encodings:
+            prob = self.unigram.prob((), encoding)
+            if prob > max_prob:
+                max_prob = prob
+                max_prob_encoding = encoding
+        return max_prob_encoding
