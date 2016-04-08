@@ -17,7 +17,6 @@ class NgramModel(object):
         '''
         if brown_categories == None:
             brown_categories = brown.categories()
-        
         samples = [[]] * n
         for category in brown_categories:
             text = brown.words(categories=category)
