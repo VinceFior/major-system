@@ -35,12 +35,15 @@ class NgramModel(object):
 
     def prob(self, context, word):
         '''
-        Returns the log probability of the word given the context, which is expected to be a tuple
-        of strings (empty in the case of a unigram).
+        Returns the log probability of the word given the context, which is expected to be a 
+        (N-1)-tuple of strings (empty in the case of a unigram).
         '''
         context = tuple([token.lower() for token in context])
         word = word.lower()
         for index, gram in enumerate(self.grams):
-            if gram[context][word] != 0:
-                return log(gram[context][word]) * pow(self.alpha, index)
+            # truncate context as gram size decreases
+            this_context = context[index:]
+            if gram[this_context][word] != 0:
+                prob = gram[this_context][word] / gram[this_context].N()
+                return log(prob * pow(self.alpha, index))
         return 0

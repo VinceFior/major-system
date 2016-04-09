@@ -155,7 +155,8 @@ class GreedyEncoder(NumberEncoder):
                 number_chunk = number[encoded_index : encoded_index + max_word_length]
                 print('Cannot find encoding for number chunk \'{0}\''.format(number_chunk))
                 return None
-        return ' '.join(encodings)
+        return encodings
+        # return ' '.join(encodings)
 
     def _encode_number_chunk(self, number_chunk):
         '''
