@@ -15,6 +15,8 @@ class NgramModel(object):
         Initializes NgramModel with a list of conditional frequency distributions representing
         N-grams, (N-1)-grams, ...., bigrams, unigrams from the Brown corpus.
         '''
+        self.n = n 
+
         if brown_categories == None:
             brown_categories = brown.categories()
         samples = [[]] * n
@@ -35,12 +37,12 @@ class NgramModel(object):
 
     def prob(self, context, word):
         '''
-        Returns the log probability of the word given the context, which is expected to be a 
-        (N-1)-tuple of strings (empty in the case of a unigram).
+        Returns the log probability of the word given the context. The context should be a tuple 
+        with no more than n - 1 elements.
         '''
         context = tuple([token.lower() for token in context])
         word = word.lower()
-        for index, gram in enumerate(self.grams):
+        for index, gram in enumerate(self.grams[-len(context) - 1:]):
             # truncate context as gram size decreases
             this_context = context[index:]
             if gram[this_context][word] != 0:

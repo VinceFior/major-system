@@ -3,6 +3,7 @@
 # This class uses the CMU Pronouncing Dictionary: http://www.speech.cs.cmu.edu/cgi-bin/cmudict
 
 import codecs # for reading the CMU dictionary file
+from nltk.corpus import brown
 
 class Pronouncer(object):
     '''
@@ -12,13 +13,16 @@ class Pronouncer(object):
 
     def __init__(self, pro_dict_file = 'phonemes/cmudict-07b.txt', 
         phonemes_file = 'phonemes/cmudict-0-7b-phones.txt', files_encoding = 'latin-1',
-        strip_stress = True):
+        strip_stress = True, vocab = set(brown.words(categories=list(brown.categories())))):
         '''
         Initializes the Pronouncer. In particular, this method gets and parses the given
         pronunciation dictionary and phonemes file using the given text encoding.
         You can also set whether this Pronouncer should automatically strip out stress markers.
+        The Pronouncer uses only words in both the pronunciation diction and the input vocabulary.
         '''
-        self.pronunciation_dictionary = self._get_pronunciation_dict(pro_dict_file, files_encoding)
+        vocab = set([word.lower() for word in vocab])
+        self.pronunciation_dictionary = self._get_pronunciation_dict(pro_dict_file, files_encoding,
+            vocab)
         # in case anyone wants the set of phonemes we use, we directly get the set here
         self.phonemes_set = self._get_phonemes(phonemes_file, files_encoding)
         self.strip_stress = strip_stress
@@ -32,11 +36,11 @@ class Pronouncer(object):
         # if not given strip_stress, use class default
         if strip_stress == None:
             strip_stress = self.strip_stress
-        upper_word = word.upper() # our dictionary is all uppercase
-        if not upper_word in self.pronunciation_dictionary:
+        lower_word = word.lower() # our dictionary is all lowercase
+        if not lower_word in self.pronunciation_dictionary:
             print('Do not know how to pronounce \'{0}\''.format(word))
             return None
-        phonemes_list = self.pronunciation_dictionary[upper_word]
+        phonemes_list = self.pronunciation_dictionary[lower_word]
         if strip_stress:
             phonemes_list = self.strip_phonemes_stress(phonemes_list)
         return phonemes_list
@@ -65,6 +69,7 @@ class Pronouncer(object):
                 if word[-1] == ')':
                     word = word[:-3]
                 # exclude words not in words_to_include
+                word = word.lower()
                 if not words_to_include or word in words_to_include:
                     # pronunciation is a string of the form 'S Y MB OLS'
                     phonemes = pronunciation.split(" ")

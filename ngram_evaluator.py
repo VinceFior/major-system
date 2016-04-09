@@ -19,15 +19,21 @@ class NgramEvaluator(object):
         Returns a score for the given phrase (a list of strings) based on the log likelihood of 
         seeing this phrase from the language model.
         '''
-        # if the input phrase has fewer than n words, add empty strings to create an n-tuple
-        # to pass into the language model
-        if len(phrase) < self.n:
-            context = tuple([''] * (self.n - len(phrase)) + phrase[:-1])
-            return self.language_model.prob(context, phrase[-1])
+        # score the first n - 1 words in the phrase
+        score = 0
+        for m in range(min(self.n, len(phrase))):
+            context = tuple(phrase[0:m])
+            word = phrase[m]
+            score += self.language_model.prob(context, word)
 
+        # if the input phrase has fewer than n words, simply score the phrase without breaking
+        # into n-grams
+        if len(phrase) < self.n:
+            return score #+ self.language_model.prob(tuple(phrase[0:len(phrase) - 1]), phrase[-1])
+
+        # otherwise, sum the log probabilities of each n-gram
         phrase = [word.lower() for word in phrase]
         grams = ngrams(phrase, self.n)
-        score = 0
         for gram in grams:
             context = gram[0:self.n - 1]
             word = gram[-1]
