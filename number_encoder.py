@@ -9,6 +9,8 @@ from nltk.corpus import brown # for RandomGreedyEncoder
 from collections import Counter # for RandomGreedyEncoder
 from numpy.random import choice # for NgramContextEncoder
 from math import exp # for NgramContextEncoder
+from stat_parser import Parser # for ParserEncoder
+from ngram_evaluator import NgramEvaluator # for ParserEncoder
 
 class NumberEncoder(object):
     '''
@@ -400,3 +402,106 @@ class NgramContextEncoder(ContextEncoder):
             probability_sum = sum(probabilities)
             probabilities_norm = [probability / probability_sum for probability in probabilities]
             return choice(encodings, p = probabilities_norm)
+
+class ParserEncoder(NumberEncoder):
+    '''
+    ParserEncoder is a NumberEncoder that creates grammatically plausible sentences.
+    '''
+
+    def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
+        max_vocab_size = 10000, parser = Parser(), evaluator = NgramEvaluator(2)):
+        '''
+        Initializes the ParserEncoder.
+        '''
+        super(ParserEncoder, self).__init__(pronouncer = pronouncer,
+            phoneme_to_digit_dict = phoneme_to_digit_dict)
+        # set up our size-limited vocab
+        if max_vocab_size != None:
+            cmu_words = set([word.lower() for word in pronouncer.pronunciation_dictionary.keys()])
+            words = []
+            for category in brown.categories():
+                text = brown.words(categories=category)
+                words += [word.lower() for word in list(text) if word in cmu_words]
+            vocabulary = set([word for word, count in Counter(words).most_common(max_vocab_size)])
+            self.phonemes_to_words_dict = self._get_phonemes_to_words_dict(vocabulary)
+        else:
+            self.phonemes_to_words_dict = self._get_phonemes_to_words_dict()
+
+        self.parser = parser
+        self.evaluator = evaluator
+
+    def _encode_number_pos(self, number, pos_tags, context = []):
+        '''
+        Helper method that encodes the given number (string of digits) as the most likely series
+        of one or two words that, as a phrase, has a part-of-speech tag in pos_tags. Picks the
+        encoding with the highest evaluator score (incorporating the given context, a list of the
+        immediately preceding words).
+        '''
+        encodings = []
+        max_word_length = len(number)
+        # split at each index so the first word has length 1, 2, ..., len(number)
+        for split in range(1, max_word_length + 1):
+            first_chunk = number[:split]
+            second_chunk = number[split:]
+            first_encodings = self._encode_number_chunk(first_chunk)
+            second_encodings = self._encode_number_chunk(second_chunk)
+            if split == max_word_length:
+                encodings += [[first_encodings]]
+            else:
+                encodings += [[first_encodings] + [second_encodings]]
+
+        best_pos_score = -float("inf")
+        best_valid_phrase = None
+        # as a backup, we also keep track of the highest-scoring encoding of any tag
+        best_any_score = -float("inf")
+        best_any_phrase = None
+        for encoding_split in encodings:
+            for enc in product(*encoding_split):
+                if len(enc) != 0:
+                    enc_with_context = [word for word in context] + [word for word in enc]
+                    score = self.evaluator.score(enc_with_context)
+                    if score > best_any_score:
+                        best_any_score = score
+                        best_any_phrase = enc
+                    if score > best_pos_score:
+                        tree = self.parser.parse(' '.join(enc))
+                        if tree:
+                            label = tree.label()
+                            if label in pos_tags:
+                                best_valid_phrase = enc
+                                best_pos_score = score
+
+        # if we found no phrases of the right part of speech, return the highest-scoring phrase
+        if best_valid_phrase is None:
+            return best_any_phrase
+        return best_valid_phrase
+
+    def encode_number(self, number):
+        '''
+        Encodes the given number (string of digits) as a series of words. Does so by making a
+        series of sentences of the form "Noun Phrase, Verb Phrase, Noun Phrase," each of which
+        encodes 3 digits in one or two words.
+        '''
+
+        noun_tags = ['NP', 'NX+NX', 'NX+NP', 'NP+NP', 'RRC'] # noun-ish tags (include SQ?)
+        verb_tags = ['VBZ', 'SQ+VP', 'VP', 'VP+VP'] # verb-ish tags (exclude 'VP+PP'?)
+        chunk_size = 3
+        encodings = []
+        for start_index in range(0, len(number), chunk_size):
+            chunk = number[start_index : start_index + 3]
+            # our sentences are of the form: noun, verb, noun.
+            if (start_index / chunk_size) % 3 == 0:
+                pos_tags = noun_tags
+            elif (start_index / chunk_size) % 3 == 1:
+                pos_tags = verb_tags
+            elif (start_index / chunk_size) % 3 == 2:
+                pos_tags = noun_tags
+            # TODO: use periods (sentence stops) in the context
+            context = [enc for enc in encodings if enc != '.']
+            chunk_encoding = self._encode_number_pos(chunk, pos_tags, context)
+            for word in chunk_encoding:
+                encodings += [word]
+            if (start_index / chunk_size) % 3 == 2:
+                encodings += ['.']
+
+        return encodings
