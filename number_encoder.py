@@ -505,9 +505,8 @@ class ParserEncoder(NumberEncoder):
                 pos_tags = verb_tags
             elif (start_index / chunk_size) % 3 == 2:
                 pos_tags = noun_tags
-            # TODO: use periods (sentence stops) in the context
-            context = [enc for enc in encodings if enc != '.']
-            chunk_encoding = self._encode_number_pos(chunk, pos_tags, context)
+            # use the previous encodings as context for this chunk
+            chunk_encoding = self._encode_number_pos(chunk, pos_tags, encodings)
             for word in chunk_encoding:
                 encodings += [word]
             if (start_index / chunk_size) % 3 == 2:
