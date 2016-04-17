@@ -61,6 +61,8 @@ class NumberEncoder(object):
         '''
         Decodes the given word to a list of digits (length-one strings).
         '''
+        if not any(c.isalpha() for c in word):
+            return ''
         phonemes_list = self.pronouncer.pronounce(word)
         # in the case of multiple pronunciations, check each one's decoding
         possible_decodings = self._decode_phonemes_list(phonemes_list)
@@ -294,7 +296,7 @@ class ContextEncoder(NumberEncoder):
     '''
 
     def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
-        max_word_length = None, context_length = 2):
+        max_word_length = None, context_length = 2, min_sentence_length = 5):
         '''
         Initializes the ContextEncoder. The encoder will consider the context of at most
         context_length previous words to choose the best subsequent word.
@@ -316,6 +318,9 @@ class ContextEncoder(NumberEncoder):
 
         # to aid encode_number(), we set up a mapping from phoneme sequences to words
         self.phonemes_to_words_dict = self._get_phonemes_to_words_dict()
+
+        # minimum number of words required per sentence
+        self.min_sentence_length = min_sentence_length
 
     def _select_encoding(self, previous_words, encodings):
         '''
@@ -353,6 +358,10 @@ class ContextEncoder(NumberEncoder):
                 number_chunk = number[encoded_index : encoded_index + max_word_length]
                 print('Cannot find encoding for number chunk \'{0}\''.format(number_chunk))
                 return None
+            # add possibility of ending the sentence
+            if len(encodings) >= self.min_sentence_length and \
+                '.' not in encodings[-self.min_sentence_length:]:
+                chunk_encodings |= set('.')
             # select the best encoding from chunk_encodings
             context = tuple(encodings[len(encodings) - context_length : len(encodings)])
             chunk_encoding = self._select_encoding(context, list(chunk_encodings))

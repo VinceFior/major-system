@@ -10,7 +10,7 @@ class NgramModel(object):
     '''
     N-gram language model with stupid backoff.
     '''
-    def __init__(self, n, alpha = 0.4, brown_categories = None):
+    def __init__(self, n, alpha = 0.1, brown_categories = None):
         '''
         Initializes NgramModel with a list of conditional frequency distributions representing
         N-grams, (N-1)-grams, ...., bigrams, unigrams from the Brown corpus.
@@ -20,11 +20,13 @@ class NgramModel(object):
         if brown_categories == None:
             brown_categories = brown.categories()
         samples = [[]] * n
-        for category in brown_categories:
-            text = brown.words(categories=category)
-            text = [word.lower() for word in list(text)]
+        sents = list(brown.sents(categories=brown_categories))
+        for sent in sents:
+            sent = [word.lower() for word in sent]
+            if sent[-1].isalpha():
+                sent += ['.']
             for index, m in enumerate(range(n, 0, -1)):
-                igrams = ngrams(text, m)
+                igrams = ngrams(sent, m)
                 igrams = [(igram[0:m - 1], igram[-1]) for igram in list(igrams)]
                 samples[index] += igrams
         # list of N-grams with descending values of N
@@ -48,4 +50,4 @@ class NgramModel(object):
             if gram[this_context][word] != 0:
                 prob = gram[this_context][word] / gram[this_context].N()
                 return log(prob * pow(self.alpha, index))
-        return 0
+        return -float('inf')

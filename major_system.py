@@ -74,7 +74,7 @@ def main():
 
     # Demonstrate NgramContextEncoder
     print('\n=== Demonstrating the NgramContextEncoder class ===')
-    for ngram_n in [1, 2, 3, 4]:
+    for ngram_n in [1, 2, 3]:
         print('\n-- Encoding with n-gram model n = {0} --'.format(ngram_n))
         ngram_context_encoder = NgramContextEncoder(pronouncer = pronouncer, max_word_length = 5,
             n = ngram_n, alpha = 0.1, select_most_likely = True)

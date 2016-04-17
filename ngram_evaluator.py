@@ -3,6 +3,7 @@
 
 from ngram_model import NgramModel
 from nltk.util import ngrams
+from math import e
 
 class NgramEvaluator(object):
     '''
@@ -39,3 +40,12 @@ class NgramEvaluator(object):
             word = gram[-1]
             score += self.language_model.prob(context, word)
         return score
+
+    def perplexity(self, phrase):
+        '''
+        Returns the perplexity of the given phrase (a list of strings).
+        '''
+        log_prob = self.score(phrase)
+        prob = pow(e, log_prob)
+        perplexity = pow(prob, -1 / len(phrase))
+        return perplexity
