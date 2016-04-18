@@ -492,9 +492,12 @@ class ParserEncoder(NumberEncoder):
         series of sentences of the form "Noun Phrase, Verb Phrase, Noun Phrase," each of which
         encodes 3 digits in one or two words.
         '''
-
-        noun_tags = ['NP', 'NX+NX', 'NX+NP', 'NP+NP', 'RRC'] # noun-ish tags (include SQ?)
-        verb_tags = ['VBZ', 'SQ+VP', 'VP', 'VP+VP'] # verb-ish tags (exclude 'VP+PP'?)
+        # todo: review full tag list (in parse.py) and decide how to handle "+"
+        noun_tags = ['NP', 'NX', 'NX+NX', 'NX+NP', 'NP+NP', 'RRC',
+                     'NN', 'NNS', 'NNP', 'NNPS'] # noun-ish tags (exclude 'SQ')
+        verb_tags = ['VP', 'VBZ', 'SQ+VP', 'VP+VP',
+                     'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ']
+                     # verb-ish tags (exclude 'VP+PP'?)
         chunk_size = 3
         encodings = []
         for start_index in range(0, len(number), chunk_size):
