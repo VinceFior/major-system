@@ -439,12 +439,12 @@ class ParserEncoder(NumberEncoder):
         self.parser = parser
         self.evaluator = evaluator
 
-    def _encode_number_pos(self, number, pos_tags, context = []):
+    def _encode_number_pos(self, number, pos_tags, pre_context, post_context):
         '''
         Helper method that encodes the given number (string of digits) as the most likely series
         of one or two words that, as a phrase, has a part-of-speech tag in pos_tags. Picks the
-        encoding with the highest evaluator score (incorporating the given context, a list of the
-        immediately preceding words).
+        encoding with the highest evaluator score (incorporating the given context, lists of the
+        immediately preceding and proceeding words).
         '''
         encodings = []
         max_word_length = len(number)
@@ -467,7 +467,7 @@ class ParserEncoder(NumberEncoder):
         for encoding_split in encodings:
             for enc in product(*encoding_split):
                 if len(enc) != 0:
-                    enc_with_context = [word for word in context] + [word for word in enc]
+                    enc_with_context = pre_context + [word for word in enc] + post_context
                     score = self.evaluator.score(enc_with_context)
                     if score > best_any_score:
                         best_any_score = score
@@ -483,6 +483,7 @@ class ParserEncoder(NumberEncoder):
         # if we found no phrases of the right part of speech, return the highest-scoring phrase
         if best_valid_phrase is None:
             return best_any_phrase
+        # TODO: if found no encoding of 1 or 2 words, fall back to another model
         return best_valid_phrase
 
     def encode_number(self, number):
@@ -497,19 +498,23 @@ class ParserEncoder(NumberEncoder):
         chunk_size = 3
         encodings = []
         for start_index in range(0, len(number), chunk_size):
-            chunk = number[start_index : start_index + 3]
+            chunk = number[start_index : start_index + chunk_size]
             # our sentences are of the form: noun, verb, noun.
-            if (start_index / chunk_size) % 3 == 0:
+            pos_index = (start_index / chunk_size) % 3
+            if pos_index == 0:
                 pos_tags = noun_tags
-            elif (start_index / chunk_size) % 3 == 1:
+            elif pos_index == 1:
                 pos_tags = verb_tags
-            elif (start_index / chunk_size) % 3 == 2:
+            elif pos_index == 2:
                 pos_tags = noun_tags
-            # use the previous encodings as context for this chunk
-            chunk_encoding = self._encode_number_pos(chunk, pos_tags, encodings)
+            pre_context = ['.'] + encodings
+            # the last fragment ends with a period as well
+            is_sentence_end = (pos_index == 2) or (start_index >= len(number) - chunk_size)
+            post_context = ['.'] if is_sentence_end else []
+            chunk_encoding = self._encode_number_pos(chunk, pos_tags, pre_context, post_context)
             for word in chunk_encoding:
                 encodings += [word]
-            if (start_index / chunk_size) % 3 == 2:
+            if is_sentence_end:
                 encodings += ['.']
 
         return encodings
