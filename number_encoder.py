@@ -380,7 +380,8 @@ class NgramContextEncoder(ContextEncoder):
     '''
 
     def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
-        max_word_length = None, n = 3, alpha = 0.1, select_most_likely = True):
+        max_word_length = None, min_sentence_length = 5, n = 3, alpha = 0.1,
+        select_most_likely = True):
         '''
         Initializes the NgramContextEncoder. The encoder will consider the context of at most
         (n - 1) previous words and choose the subsequent word with highest n-gram probability
@@ -388,7 +389,7 @@ class NgramContextEncoder(ContextEncoder):
         '''
         super(NgramContextEncoder, self).__init__(pronouncer = pronouncer,
             phoneme_to_digit_dict = phoneme_to_digit_dict, max_word_length = max_word_length,
-            context_length = n - 1)
+            context_length = n - 1, min_sentence_length = min_sentence_length)
         self.ngram = NgramModel(n, alpha = alpha)
         self.select_most_likely = select_most_likely
 
@@ -467,7 +468,7 @@ class ParserEncoder(NumberEncoder):
         for encoding_split in encodings:
             for enc in product(*encoding_split):
                 if len(enc) != 0:
-                    enc_with_context = pre_context + [word for word in enc] + post_context
+                    enc_with_context = pre_context + list(enc) + post_context
                     score = self.evaluator.score(enc_with_context)
                     if score > best_any_score:
                         best_any_score = score
