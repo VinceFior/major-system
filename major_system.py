@@ -3,7 +3,7 @@
 
 from pronouncer import Pronouncer
 from number_encoder import (NumberEncoder, RandomGreedyEncoder, UnigramGreedyEncoder,
-                            NgramContextEncoder, ParserEncoder)
+                            NgramContextEncoder, NgramPOSContextEncoder, ParserEncoder)
 from ngram_evaluator import NgramEvaluator
 
 def main():
@@ -95,9 +95,11 @@ def main():
     rge = RandomGreedyEncoder(pronouncer = pronouncer, max_word_length = 2, max_vocab_size = 50000)
     uge = UnigramGreedyEncoder(pronouncer = pronouncer, max_word_length = 2)
     nce = NgramContextEncoder(pronouncer = pronouncer, min_sentence_length = 5, n = 3, alpha = 0.1)
+    npce = NgramPOSContextEncoder(pronouncer = pronouncer, min_sentence_length = 5, n = 3, 
+        alpha = 0.1, select_most_likely = True)
     pe = ParserEncoder(pronouncer = pronouncer, evaluator = NgramEvaluator(2))
     for number in ['123456789']:
-        for encoder in [rge, uge, nce, pe]:
+        for encoder in [rge, uge, nce, npce, pe]:
             encoding = encoder.encode_number(number)
             perplexity = evaluator.perplexity(encoding)
             print('Encoding for \'{0}\' with encoder {1} has perplexity {2} and is: {3}'.format(
