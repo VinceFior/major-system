@@ -6,13 +6,13 @@ from nltk.probability import ConditionalFreqDist, FreqDist, MLEProbDist, Conditi
 from nltk.util import ngrams
 from math import log
 
-class NgramModel(object):
+class NgramBase(object):
     '''
-    N-gram language model with stupid backoff.
+    NgramBase is the base class for any N-gram language model.
     '''
     def __init__(self, n, alpha = 0.1, brown_categories = None):
         '''
-        Initializes NgramModel with a list of conditional frequency distributions representing
+        Initializes NgramBase with a list of conditional frequency distributions representing
         N-grams, (N-1)-grams, ...., bigrams, unigrams from the Brown corpus.
         '''
         self.n = n 
@@ -20,7 +20,7 @@ class NgramModel(object):
         if brown_categories == None:
             brown_categories = brown.categories()
         samples = [[]] * n
-        sents = list(brown.sents(categories=brown_categories))
+        sents = self._get_sentences(brown_categories)
         for sent in sents:
             sent = [word.lower() for word in sent]
             if sent[-1].isalpha():
@@ -37,17 +37,50 @@ class NgramModel(object):
         # multiplier for each level of backoff
         self.alpha = alpha
 
-    def prob(self, context, word):
+    def _get_sentences(self, brown_categories):
         '''
-        Returns the log probability of the word given the context. The context should be a tuple 
+        Returns a list of lists of strings representing sentences.
+        '''
+        raise NotImplementedError()
+
+    def prob(self, context, element):
+        '''
+        Returns the log probability of the element given the context. The context should be a tuple 
         with no more than n - 1 elements.
         '''
         context = tuple([token.lower() for token in context])
-        word = word.lower()
+        element = element.lower()
         for index, gram in enumerate(self.grams[-len(context) - 1:]):
             # truncate context as gram size decreases
             this_context = context[index:]
-            if gram[this_context][word] != 0:
-                prob = gram[this_context][word] / gram[this_context].N()
+            if gram[this_context][element] != 0:
+                prob = gram[this_context][element] / gram[this_context].N()
                 return log(prob * pow(self.alpha, index))
         return -float('inf')
+
+
+class NgramModel(NgramBase):
+    '''
+    N-gram language model with stupid backoff.
+    '''
+    def _get_sentences(self, brown_categories):
+        '''
+        Returns a list of lists of strings representing the words in each sentence.
+        '''
+        return list(brown.sents(categories=brown_categories))
+
+
+class NgramPOSModel(NgramBase):
+    '''
+    N-gram part-of-speech language model with stupid backoff.
+    '''
+    def _get_sentences(self, brown_categories):
+        '''
+        Returns a list of lists of strings representing the part-of-speech of each word in each
+        sentence.
+        '''
+        tagged_sents = list(brown.tagged_sents(categories=brown_categories))
+        tags = []
+        for sent in tagged_sents:
+            tags += [[tag for word, tag in sent]]
+        return tags
