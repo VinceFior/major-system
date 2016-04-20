@@ -10,6 +10,7 @@ class NgramBase(object):
     '''
     NgramBase is the base class for any N-gram language model.
     '''
+
     def __init__(self, n, alpha = 0.1, brown_categories = None):
         '''
         Initializes NgramBase with a list of conditional frequency distributions representing
@@ -63,6 +64,7 @@ class NgramModel(NgramBase):
     '''
     N-gram language model with stupid backoff.
     '''
+
     def _get_sentences(self, brown_categories):
         '''
         Returns a list of lists of strings representing the words in each sentence.
@@ -74,6 +76,7 @@ class NgramPOSModel(NgramBase):
     '''
     N-gram part-of-speech language model with stupid backoff.
     '''
+    
     def _get_sentences(self, brown_categories):
         '''
         Returns a list of lists of strings representing the part-of-speech of each word in each

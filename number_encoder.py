@@ -9,6 +9,8 @@ from nltk.corpus import brown # for RandomGreedyEncoder
 from collections import Counter # for RandomGreedyEncoder
 from numpy.random import choice # for NgramContextEncoder
 from math import exp # for NgramContextEncoder
+from nltk.tag import UnigramTagger # for NgramPOSContextEncoder
+from ngram_model import NgramPOSModel # for NgramPOSContextEncoder
 from stat_parser import Parser # for ParserEncoder
 from ngram_evaluator import NgramEvaluator # for ParserEncoder
 
@@ -291,6 +293,7 @@ class UnigramGreedyEncoder(GreedyEncoder):
                 max_prob_encoding = encoding
         return max_prob_encoding
 
+
 class ContextEncoder(NumberEncoder):
     '''
     ContextEncoder is the base class for any encoder that uses the previously chosen words as
@@ -373,6 +376,7 @@ class ContextEncoder(NumberEncoder):
 
         return encodings
 
+
 class NgramContextEncoder(ContextEncoder):
     '''
     NgramContextEncoder is a ContextEncoder that selects the most common encoding according to an
@@ -412,6 +416,91 @@ class NgramContextEncoder(ContextEncoder):
             probability_sum = sum(probabilities)
             probabilities_norm = [probability / probability_sum for probability in probabilities]
             return choice(encodings, p = probabilities_norm)
+
+
+class NgramPOSContextEncoder(ContextEncoder):
+    '''
+    NgramPOSContextEncoder is a ContextEncoder that selects the most common encoding according to 
+    an n-gram model for parts-of-speech and words.
+    '''
+
+    def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
+        max_word_length = None, min_sentence_length = 5, n = 3, alpha = 0.1,
+        select_most_likely = True, tagger = UnigramTagger(brown.tagged_sents())):
+        '''
+        Initializes the NgramPOSContextEncoder. The encoder will consider the context of at most
+        (n - 1) previous words and choose the subsequent word with highest probability 
+        part-of-speech and with highest n-gram probability if select_most_likely is True 
+        (otherwise, will sample weighted by probabilities).
+        '''
+        super(NgramPOSContextEncoder, self).__init__(pronouncer = pronouncer,
+            phoneme_to_digit_dict = phoneme_to_digit_dict, max_word_length = max_word_length,
+            context_length = n - 1, min_sentence_length = min_sentence_length)
+        self.ngram = NgramModel(n, alpha = alpha)
+        self.select_most_likely = select_most_likely
+
+        self.tagger = tagger
+        self.pos_ngram = NgramPOSModel(n, alpha = alpha)
+
+    def _select_encoding(self, previous_words, encodings):
+        '''
+        Finds the most common part-of-speech and selects the most common encoding with that
+        part-of-speech according to n-gram probabilities.
+        '''
+        previous_pos = tuple([tag for word, tag in self.tagger.tag(previous_words)])
+        tag_to_words_dict = {}
+        for word, tag in self.tagger.tag(encodings):
+            if tag == None:
+                continue
+            if tag in tag_to_words_dict:
+                tag_to_words_dict[tag] += [word]
+            else:
+                tag_to_words_dict[tag] = [word]
+
+        if self.select_most_likely:
+            return self._select_most_likely_encoding(previous_words, previous_pos,
+                tag_to_words_dict, encodings)
+        else:
+            return self._select_weighted_prob_encoding(previous_words, previous_pos,
+                tag_to_words_dict, encodings)
+
+    def _select_most_likely_encoding(self, previous_words, previous_pos, tag_to_words_dict,
+        encodings):
+        # find most likely part-of-speech for the next word
+        max_prob = -float('inf')
+        max_prob_tag = None
+        for tag in tag_to_words_dict.keys():
+            prob = self.pos_ngram.prob(previous_pos, tag)
+            if prob > max_prob:
+                max_prob = prob
+                max_prob_tag = tag
+        # find most likely possible next word that has most likely POS tag
+        if max_prob_tag != None:
+            encodings = tag_to_words_dict[max_prob_tag]
+        max_prob = -float('inf')
+        max_prob_encoding = None
+        for encoding in encodings:
+            prob = self.ngram.prob(previous_words, encoding)
+            if prob > max_prob:
+                max_prob = prob
+                max_prob_encoding = encoding
+        return max_prob_encoding
+
+    def _select_weighted_prob_encoding(self, previous_words, previous_pos, tag_to_words_dict,
+        encodings):
+        # select POS tag for next word from weighted probabilities
+        tags = list(tag_to_words_dict.keys())
+        pos_probabilities = [exp(self.pos_ngram.prob(previous_pos, tag)) for tag in tags]
+        pos_probability_sum = sum(pos_probabilities)
+        pos_probabilities_norm = [prob / pos_probability_sum for prob in pos_probabilities]
+        tag = choice(tags, p = pos_probabilities_norm)
+        # select next word with POS chosen above from weighted probabilties
+        encodings = tag_to_words_dict[tag]
+        probabilities = [exp(self.ngram.prob(previous_words, encoding)) for encoding in encodings]
+        probability_sum = sum(probabilities)
+        probabilities_norm = [probability / probability_sum for probability in probabilities]
+        return choice(encodings, p = probabilities_norm)
+
 
 class ParserEncoder(NumberEncoder):
     '''
