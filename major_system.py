@@ -107,6 +107,7 @@ def main():
     #             number, encoder, perplexity, encoding))
 
     # Final results
+    print('Initializing models..')
     pronouncer = Pronouncer()
     evaluator = NgramEvaluator(2)
     rge = RandomGreedyEncoder(pronouncer = pronouncer, max_word_length = 2, max_vocab_size = 50000)
@@ -116,12 +117,14 @@ def main():
         alpha = 0.1, select_most_likely = True)
     pe = ParserEncoder(pronouncer = pronouncer, evaluator = NgramEvaluator(2))
     ste = SentenceTaggerEncoder(pronouncer = pronouncer)
+    print('Models initialized.')
     for number in ['123456789', '0987654321', '3141592653']:
+        print()
         for encoder in [rge, uge, nce, npce, pe, ste]:
             encoding = encoder.encode_number(number)
             perplexity = evaluator.perplexity(encoding)
-            print('Encoding for \'{0}\' with encoder {1} has perplexity {2} and is: {3}'.format(
-                number, encoder, perplexity, encoding))
+            print('{0} encoding for \'{1}\' has perplexity {2:.0f}: {3}'.format(
+                encoder, number, perplexity, encoding))
 
 
 if __name__ == "__main__":
