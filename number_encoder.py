@@ -1,7 +1,7 @@
 # number_encoder.py
 # By Vincent Fiorentini and Megan Shao, (c) 2016.
 
-from pronouncer import Pronouncer
+from pronouncer import Pronouncer # note: we could instead use nltk.corpus.cmudict
 from ngram_model import NgramModel
 from random import sample # for RandomGreedyEncoder
 from itertools import product # for RandomGreedyEncoder
@@ -13,6 +13,7 @@ from nltk.tag import UnigramTagger # for NgramPOSContextEncoder
 from ngram_model import NgramPOSModel # for NgramPOSContextEncoder
 from stat_parser import Parser # for ParserEncoder
 from ngram_evaluator import NgramEvaluator # for ParserEncoder
+from nltk.tag import UnigramTagger # for SentenceTaggerEncoder
 
 class NumberEncoder(object):
     '''
@@ -146,6 +147,23 @@ class NumberEncoder(object):
                     phonemes_to_words_dict[included_phonemes] = [word]
         return phonemes_to_words_dict
 
+    def _get_vocab(self, max_vocab_size):
+        '''
+        Helper method that returns a set of max_vocab_size most common words from the brown corpus.
+        '''
+        cmu_words = set([word.lower() for word in self.pronouncer.pronunciation_dictionary.keys()])
+        words = []
+        for category in brown.categories():
+            text = brown.words(categories=category)
+            words += [word.lower() for word in list(text) if word in cmu_words]
+        vocabulary = set([word for word, count in Counter(words).most_common()])
+        return vocabulary
+
+    def __repr__(self):
+        '''
+        We represent (print) any NumberEncoder simply by printing its class name, for readability.
+        '''
+        return self.__class__.__name__
 
 class GreedyEncoder(NumberEncoder):
     '''
@@ -247,13 +265,8 @@ class RandomGreedyEncoder(GreedyEncoder):
         super(RandomGreedyEncoder, self).__init__(pronouncer = pronouncer,
             phoneme_to_digit_dict = phoneme_to_digit_dict, max_word_length = max_word_length)
 
-        if max_vocab_size != None: 
-            cmu_words = set([word.lower() for word in pronouncer.pronunciation_dictionary.keys()])
-            words = []
-            for category in brown.categories():
-                text = brown.words(categories=category)
-                words += [word.lower() for word in list(text) if word in cmu_words]
-            vocabulary = set([word for word, count in Counter(words).most_common(max_vocab_size)])
+        if max_vocab_size != None:
+            vocabulary = self._get_vocab(max_vocab_size)
             self.phonemes_to_words_dict = self._get_phonemes_to_words_dict(vocabulary)
 
     def _select_encoding(self, encodings):
@@ -501,7 +514,6 @@ class NgramPOSContextEncoder(ContextEncoder):
         probabilities_norm = [probability / probability_sum for probability in probabilities]
         return choice(encodings, p = probabilities_norm)
 
-
 class ParserEncoder(NumberEncoder):
     '''
     ParserEncoder is a NumberEncoder that creates grammatically plausible sentences.
@@ -516,12 +528,7 @@ class ParserEncoder(NumberEncoder):
             phoneme_to_digit_dict = phoneme_to_digit_dict)
         # set up our size-limited vocab
         if max_vocab_size != None:
-            cmu_words = set([word.lower() for word in pronouncer.pronunciation_dictionary.keys()])
-            words = []
-            for category in brown.categories():
-                text = brown.words(categories=category)
-                words += [word.lower() for word in list(text) if word in cmu_words]
-            vocabulary = set([word for word, count in Counter(words).most_common(max_vocab_size)])
+            vocabulary = self._get_vocab(max_vocab_size)
             self.phonemes_to_words_dict = self._get_phonemes_to_words_dict(vocabulary)
         else:
             self.phonemes_to_words_dict = self._get_phonemes_to_words_dict()
@@ -610,4 +617,110 @@ class ParserEncoder(NumberEncoder):
             if is_sentence_end:
                 encodings += ['.']
 
+        return encodings
+
+class SentenceTaggerEncoder(NgramContextEncoder):
+    '''
+    SentenceTaggerEncoder is an NgramContextEncoder that creates sentences whose part-of-speech
+    tags match a sentence in the training corpus, selecting from valid words by n-gram probability.
+    '''
+    def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
+        max_word_length = None, min_sentence_length = -1, n = 3, alpha = 0.1,
+        select_most_likely = True, tagger = UnigramTagger(brown.tagged_sents(tagset='universal'))):
+        '''
+        Initializes the SentenceTaggerEncoder.
+        '''
+        super(SentenceTaggerEncoder, self).__init__(pronouncer = pronouncer,
+            phoneme_to_digit_dict = phoneme_to_digit_dict, max_word_length = max_word_length,
+            min_sentence_length = min_sentence_length, n = n, alpha = alpha,
+            select_most_likely = select_most_likely)
+
+        # set up our tagger and sentence_templates
+        self.tagger = tagger
+        num_sentence_templates = 100
+        self.templates = self._get_sentence_templates(num_sentence_templates)
+
+    def _get_sentence_templates(self, num_templates):
+        '''
+        Returns a list of tuples containing a sentence template (POS tag tuple) and count.
+        For example, an element of the returned list is of the form (('ADJ', 'NOUN'), 85).
+        '''
+        # get tagged sentences with the simple 'universal' tagset
+        tagged_sents = list(brown.tagged_sents(tagset='universal'))
+        # extract the POS tags (not the actual words) from tagged_sents, skipping punctuation tags
+        sent_tags = [tuple([word_tag[1] for word_tag in tag_sent if word_tag[1] != '.'])
+                     for tag_sent in tagged_sents]
+        # filter out any sentence with an unknown word or a number
+        def bad_tag(tag):
+           return (tag == 'X' or tag == 'NUM')
+        sent_tags_filtered = list(filter(lambda tag_sent:not any(bad_tag(tag) for tag in tag_sent),
+                                  sent_tags))
+        # filter out any sentence that has no 'VERB'
+        sent_tags_filtered = [tag_sent for tag_sent in sent_tags_filtered if 'VERB' in tag_sent]
+        # select only the num_templates most common templates
+        templates = Counter(sent_tags_filtered).most_common(num_templates)
+        return templates
+
+    def _get_sentence_template(self):
+        '''
+        Randomly selects a sentence template (a tuple of POS tags) from self.templates.
+        '''
+        probs = []
+        total_prob = 0
+        for template in self.templates:
+            template_prob = template[1]
+            probs += [template_prob]
+            total_prob += template_prob
+        probs_norm = [prob / total_prob for prob in probs]
+        template_sentences = [t[0] for t in self.templates]
+        sentence_template = choice(template_sentences, p = probs_norm)
+        return sentence_template
+
+    def encode_number(self, number, max_word_length = None, context_length = None):
+        '''
+        Encodes the given number (string of digits) as a series of words. This series of words
+        will be a series of sentences (separated by periods). Considers all possible digit chunks
+        up to max_word_length and, based on the previous context_length words, selects a word that
+        matches the needed part-of-speech tag via self._select_encoding().
+        '''
+        # if not given max_word_length, use class default
+        if max_word_length == None:
+            max_word_length = self.max_word_length
+
+        # if not given context_length, use class default
+        if context_length == None:
+            context_length = self.context_length
+
+        encoded_index = 0 # the last index of number we've encoded, inclusive
+        encodings = []
+        sentence_template = None
+        while encoded_index < len(number):
+            if (sentence_template == None) or (sentence_index == len(sentence_template) - 1):
+                sentence_template = self._get_sentence_template()
+                sentence_index = 0
+                encodings += ['.']
+            else:
+                sentence_index += 1
+            # for all possible chunks starting at this position, find all possible encodings
+            chunk_encodings = set()
+            for chunk_length in range(1, max_word_length + 1):
+                number_chunk = number[encoded_index : encoded_index + chunk_length]
+                chunk_encodings |= set(self._encode_number_chunk(number_chunk))
+            # filter out the chunk_encodings that do not match the needed part-of-speech tag
+            pos_tag = sentence_template[sentence_index]
+            chunk_encodings = [encoding for encoding in chunk_encodings
+                               if self.tagger.tag([encoding])[0][1] == pos_tag]
+            # select the best encoding from chunk_encodings
+            context = tuple(encodings[len(encodings) - context_length : len(encodings)])
+            # note: we could improve the context by adding a post_context (i.e., a period at end)
+            chunk_encoding = self._select_encoding(context, list(chunk_encodings))
+            # sometimes, none of the chunk_encodings matches the needed pos_tag; currently, we
+            # just skip over the tag
+            if chunk_encoding != None:
+                encodings += [chunk_encoding]
+                # increment encoded_index based on the chosen chunk_encoding
+                encoded_index += len(self.decode_word(chunk_encoding))
+        encodings += ['.']
+        if encodings[0] == '.':
+            encodings = encodings[1:]
         return encodings
