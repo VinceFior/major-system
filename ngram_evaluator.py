@@ -30,7 +30,7 @@ class NgramEvaluator(object):
         # if the input phrase has fewer than n words, simply score the phrase without breaking
         # into n-grams
         if len(phrase) < self.n:
-            return score #+ self.language_model.prob(tuple(phrase[0:len(phrase) - 1]), phrase[-1])
+            return score
 
         # otherwise, sum the log probabilities of each n-gram
         phrase = [word.lower() for word in phrase]

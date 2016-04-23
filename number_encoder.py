@@ -626,7 +626,8 @@ class SentenceTaggerEncoder(NgramContextEncoder):
     '''
     def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
         max_word_length = None, min_sentence_length = -1, n = 3, alpha = 0.1,
-        select_most_likely = True, tagger = UnigramTagger(brown.tagged_sents(tagset='universal'))):
+        select_most_likely = True, tagger_type = UnigramTagger, 
+        tagged_sents = brown.tagged_sents(tagset='universal'), num_sentence_templates = 100):
         '''
         Initializes the SentenceTaggerEncoder.
         '''
@@ -636,8 +637,9 @@ class SentenceTaggerEncoder(NgramContextEncoder):
             select_most_likely = select_most_likely)
 
         # set up our tagger and sentence_templates
-        self.tagger = tagger
-        num_sentence_templates = 100
+        self.tagger = tagger_type(tagged_sents)
+        self.tagged_sents = tagged_sents
+        self.num_sentence_templates = num_sentence_templates
         self.templates = self._get_sentence_templates(num_sentence_templates)
 
     def _get_sentence_templates(self, num_templates):
@@ -645,11 +647,10 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         Returns a list of tuples containing a sentence template (POS tag tuple) and count.
         For example, an element of the returned list is of the form (('ADJ', 'NOUN'), 85).
         '''
-        # get tagged sentences with the simple 'universal' tagset
-        tagged_sents = list(brown.tagged_sents(tagset='universal'))
-        # extract the POS tags (not the actual words) from tagged_sents, skipping punctuation tags
+        # extract the POS tags (not the actual words) from self.tagged_sents, skipping punctuation 
+        # tags
         sent_tags = [tuple([word_tag[1] for word_tag in tag_sent if word_tag[1] != '.'])
-                     for tag_sent in tagged_sents]
+                     for tag_sent in self.tagged_sents]
         # filter out any sentence with an unknown word or a number
         def bad_tag(tag):
            return (tag == 'X' or tag == 'NUM')
@@ -676,7 +677,28 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         sentence_template = choice(template_sentences, p = probs_norm)
         return sentence_template
 
-    def encode_number(self, number, max_word_length = None, context_length = None):
+    def encode_number(self, number, max_word_length = None, context_length = None, num_times = 5,
+        evaluator = NgramEvaluator(2)):
+        '''
+        Generates num_times encodings and returns the encoding with the lowest perplexity according
+        to the evaluator (assumes the evaluator has a perplexity() function).
+        '''
+        # generate num_times encodings
+        encodings = []
+        for i in range(num_times):
+            encoding = self.encode_number_once(number, max_word_length, context_length)
+            encodings += [encoding]
+        # determine encoding with the lowest perplexity
+        min_perplexity = float('inf')
+        min_perplexity_encoding = None
+        for encoding in encodings:
+            perplexity = evaluator.perplexity(encoding)
+            if perplexity < min_perplexity:
+                min_perplexity = perplexity
+                min_perplexity_encoding = encoding
+        return min_perplexity_encoding
+
+    def encode_number_once(self, number, max_word_length = None, context_length = None):
         '''
         Encodes the given number (string of digits) as a series of words. This series of words
         will be a series of sentences (separated by periods). Considers all possible digit chunks
@@ -698,7 +720,8 @@ class SentenceTaggerEncoder(NgramContextEncoder):
             if (sentence_template == None) or (sentence_index == len(sentence_template) - 1):
                 sentence_template = self._get_sentence_template()
                 sentence_index = 0
-                encodings += ['.']
+                if len(encodings) != 0:
+                    encodings += ['.']
             else:
                 sentence_index += 1
             # for all possible chunks starting at this position, find all possible encodings
@@ -714,13 +737,23 @@ class SentenceTaggerEncoder(NgramContextEncoder):
             context = tuple(encodings[len(encodings) - context_length : len(encodings)])
             # note: we could improve the context by adding a post_context (i.e., a period at end)
             chunk_encoding = self._select_encoding(context, list(chunk_encodings))
-            # sometimes, none of the chunk_encodings matches the needed pos_tag; currently, we
-            # just skip over the tag
+            
             if chunk_encoding != None:
                 encodings += [chunk_encoding]
                 # increment encoded_index based on the chosen chunk_encoding
                 encoded_index += len(self.decode_word(chunk_encoding))
+            else:
+                # if none of the chunk_encodings matches the needed pos_tag, remove all encodings
+                # used in the current sentence and select a (hopefully) new sentence template
+                sentence_template = None
+                if '.' not in encodings:
+                    encodings = []
+                    encoded_index = 0
+                else:
+                    last_period_index = (len(encodings) - 1) - encodings[::-1].index('.')
+                    encodings = encodings[:last_period_index]
+                    partial_sentence = encodings[last_period_index + 1:]
+                    partial_sentence_len = len(self.decode_words(partial_sentence))
+                    encoded_index -= partial_sentence_len
         encodings += ['.']
-        if encodings[0] == '.':
-            encodings = encodings[1:]
         return encodings
