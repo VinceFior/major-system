@@ -625,7 +625,7 @@ class SentenceTaggerEncoder(NgramContextEncoder):
     tags match a sentence in the training corpus, selecting from valid words by n-gram probability.
     '''
     def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
-        max_word_length = None, min_sentence_length = -1, n = 3, alpha = 0.1,
+        max_word_length = None, min_sentence_length = 5, n = 3, alpha = 0.1,
         select_most_likely = True, tagger_type = UnigramTagger, 
         tagged_sents = brown.tagged_sents(tagset='universal'), num_sentence_templates = 100):
         '''
@@ -640,6 +640,8 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         self.tagger = tagger_type(tagged_sents)
         self.tagged_sents = tagged_sents
         self.num_sentence_templates = num_sentence_templates
+        # some parts of speech can be reasonably omitted from any sentence - we call these optional
+        self.optional_tags = ['DET', 'ADJ', 'ADV']
         self.templates = self._get_sentence_templates()
 
     def _get_sentence_templates(self):
@@ -658,6 +660,12 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                                   sent_tags))
         # filter out any sentence that has no 'VERB'
         sent_tags_filtered = [tag_sent for tag_sent in sent_tags_filtered if 'VERB' in tag_sent]
+        # filter out any sentence that does not have enough required parts of speech (is too short)
+        def long_enough(tag_sent):
+            num_optional_tags = sum([tag_sent.count(tag) for tag in self.optional_tags])
+            num_required_tags = len(tag_sent) - num_optional_tags
+            return num_required_tags >= self.min_sentence_length
+        sent_tags_filtered = [tag_sent for tag_sent in sent_tags_filtered if long_enough(tag_sent)]
         # select only the self.num_sentence_templates most common templates
         templates = Counter(sent_tags_filtered).most_common(self.num_sentence_templates)
         return templates
@@ -731,8 +739,12 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                 chunk_encodings |= set(self._encode_number_chunk(number_chunk))
             # filter out the chunk_encodings that do not match the needed part-of-speech tag
             pos_tag = sentence_template[sentence_index]
+            pos_tags = [pos_tag]
+            # if the pos_tag is a pronoun, we allow a noun instead
+            if pos_tag == 'PRON':
+                pos_tags += ['NOUN']
             chunk_encodings = [encoding for encoding in chunk_encodings
-                               if self.tagger.tag([encoding])[0][1] == pos_tag]
+                               if self.tagger.tag([encoding])[0][1] in pos_tags]
             # select the best encoding from chunk_encodings
             context = tuple(encodings[len(encodings) - context_length : len(encodings)])
             # note: we could improve the context by adding a post_context (i.e., a period at end)
@@ -742,7 +754,7 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                 encodings += [chunk_encoding]
                 # increment encoded_index based on the chosen chunk_encoding
                 encoded_index += len(self.decode_word(chunk_encoding))
-            else:
+            elif pos_tag not in self.optional_tags:
                 # if none of the chunk_encodings matches the needed pos_tag, remove all encodings
                 # used in the current sentence and select a (hopefully) new sentence template
                 sentence_template = None
