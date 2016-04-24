@@ -11,9 +11,14 @@ class NgramEvaluator(object):
     language model.
     '''
 
-    def __init__(self, n):
+    def __init__(self, n, alpha = None, ngram_model = None):
         self.n = n
-        self.language_model = NgramModel(n)
+        if ngram_model != None:
+            self.language_model = ngram_model
+        elif alpha != None:
+            self.language_model = NgramModel(n, alpha = alpha)
+        else:
+            self.language_model = NgramModel(n)
 
     def score(self, phrase):
         '''

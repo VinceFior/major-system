@@ -686,11 +686,13 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         return sentence_template
 
     def encode_number(self, number, max_word_length = None, context_length = None, num_times = 5,
-        evaluator = NgramEvaluator(2)):
+        evaluator = None):
         '''
         Generates num_times encodings and returns the encoding with the lowest perplexity according
         to the evaluator (assumes the evaluator has a perplexity() function).
         '''
+        if evaluator == None:
+            evaluator = NgramEvaluator(self.ngram.n, ngram_model = self.ngram)
         # generate num_times encodings
         encodings = []
         for i in range(num_times):
