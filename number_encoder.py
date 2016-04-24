@@ -642,6 +642,7 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         self.num_sentence_templates = num_sentence_templates
         # some parts of speech can be reasonably omitted from any sentence - we call these optional
         self.optional_tags = ['DET', 'ADJ', 'ADV']
+        self.allowed_punctuation = ['.', ',', ';', '!', '?']
         self.templates = self._get_sentence_templates()
 
     def _get_sentence_templates(self):
@@ -651,7 +652,8 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         '''
         # extract the POS tags (not the actual words) from self.tagged_sents, skipping punctuation 
         # tags
-        sent_tags = [tuple([word_tag[1] for word_tag in tag_sent if word_tag[1] != '.'])
+        sent_tags = [tuple([word_tag[1] if word_tag[1] != '.' else word_tag[0] for word_tag in tag_sent
+                            if word_tag[1] != '.' or word_tag[0] in self.allowed_punctuation])
                      for tag_sent in self.tagged_sents]
         # filter out any sentence with an unknown word or a number
         def bad_tag(tag):
@@ -663,7 +665,8 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         # filter out any sentence that does not have enough required parts of speech (is too short)
         def long_enough(tag_sent):
             num_optional_tags = sum([tag_sent.count(tag) for tag in self.optional_tags])
-            num_required_tags = len(tag_sent) - num_optional_tags
+            num_punctuation_tags = sum([tag_sent.count(tag) for tag in self.allowed_punctuation])
+            num_required_tags = len(tag_sent) - (num_optional_tags + num_punctuation_tags)
             return num_required_tags >= self.min_sentence_length
         sent_tags_filtered = [tag_sent for tag_sent in sent_tags_filtered if long_enough(tag_sent)]
         # select only the self.num_sentence_templates most common templates
@@ -728,19 +731,23 @@ class SentenceTaggerEncoder(NgramContextEncoder):
             if (sentence_template == None) or (sentence_index == len(sentence_template) - 1):
                 sentence_template = self._get_sentence_template()
                 sentence_index = 0
-                if len(encodings) != 0:
-                    encodings += ['.']
+                #if len(encodings) != 0:
+                #    encodings += ['.']
             else:
                 sentence_index += 1
+            pos_tag = sentence_template[sentence_index]
+            # if the pos_tag is punctuation, continue
+            if pos_tag in self.allowed_punctuation:
+                encodings += [pos_tag]
+                continue
             # for all possible chunks starting at this position, find all possible encodings
             chunk_encodings = set()
             for chunk_length in range(1, max_word_length + 1):
                 number_chunk = number[encoded_index : encoded_index + chunk_length]
                 chunk_encodings |= set(self._encode_number_chunk(number_chunk))
             # filter out the chunk_encodings that do not match the needed part-of-speech tag
-            pos_tag = sentence_template[sentence_index]
-            pos_tags = [pos_tag]
             # if the pos_tag is a pronoun, we allow a noun instead
+            pos_tags = [pos_tag]
             if pos_tag == 'PRON':
                 pos_tags += ['NOUN']
             chunk_encodings = [encoding for encoding in chunk_encodings
@@ -759,14 +766,14 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                 # if none of the chunk_encodings matches the needed pos_tag, remove all encodings
                 # used in the current sentence and select a (hopefully) new sentence template
                 sentence_template = None
-                if '.' not in encodings:
+                if '.' not in encodings: # not any of self.allowed_punctuation
                     encodings = []
                     encoded_index = 0
                 else:
-                    last_period_index = (len(encodings) - 1) - encodings[::-1].index('.')
+                    last_period_index = (len(encodings) - 1) - encodings[::-1].index('.') # self.allowed_punctuation
                     partial_sentence = encodings[last_period_index + 1:]
                     encodings = encodings[:last_period_index]
                     partial_sentence_len = len(self.decode_words(partial_sentence))
                     encoded_index -= partial_sentence_len
-        encodings += ['.']
+        encodings += ['.'] # only if doesn't already end in punctuation
         return encodings
