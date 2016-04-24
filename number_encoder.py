@@ -748,6 +748,7 @@ class SentenceTaggerEncoder(NgramContextEncoder):
             # select the best encoding from chunk_encodings
             context = tuple(encodings[len(encodings) - context_length : len(encodings)])
             # note: we could improve the context by adding a post_context (i.e., a period at end)
+            # note: we should probably have an NgramEvaluator, not be an NgramContextEncoder
             chunk_encoding = self._select_encoding(context, list(chunk_encodings))
             
             if chunk_encoding != None:
@@ -763,8 +764,8 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                     encoded_index = 0
                 else:
                     last_period_index = (len(encodings) - 1) - encodings[::-1].index('.')
-                    encodings = encodings[:last_period_index]
                     partial_sentence = encodings[last_period_index + 1:]
+                    encodings = encodings[:last_period_index]
                     partial_sentence_len = len(self.decode_words(partial_sentence))
                     encoded_index -= partial_sentence_len
         encodings += ['.']
