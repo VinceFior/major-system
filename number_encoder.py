@@ -640,9 +640,9 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         self.tagger = tagger_type(tagged_sents)
         self.tagged_sents = tagged_sents
         self.num_sentence_templates = num_sentence_templates
-        self.templates = self._get_sentence_templates(num_sentence_templates)
+        self.templates = self._get_sentence_templates()
 
-    def _get_sentence_templates(self, num_templates):
+    def _get_sentence_templates(self):
         '''
         Returns a list of tuples containing a sentence template (POS tag tuple) and count.
         For example, an element of the returned list is of the form (('ADJ', 'NOUN'), 85).
@@ -658,8 +658,8 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                                   sent_tags))
         # filter out any sentence that has no 'VERB'
         sent_tags_filtered = [tag_sent for tag_sent in sent_tags_filtered if 'VERB' in tag_sent]
-        # select only the num_templates most common templates
-        templates = Counter(sent_tags_filtered).most_common(num_templates)
+        # select only the self.num_sentence_templates most common templates
+        templates = Counter(sent_tags_filtered).most_common(self.num_sentence_templates)
         return templates
 
     def _get_sentence_template(self):
@@ -669,7 +669,7 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         probs = []
         total_prob = 0
         for template in self.templates:
-            template_prob = template[1]
+            template_prob = template[1] * pow(len(template[0]), 2)
             probs += [template_prob]
             total_prob += template_prob
         probs_norm = [prob / total_prob for prob in probs]
