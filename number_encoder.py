@@ -56,6 +56,27 @@ class NumberEncoder(object):
                 possible_encodings += self.phonemes_to_words_dict[phoneme_sequence]
         return possible_encodings
 
+    def format_encoding(self, encoding):
+        '''
+        Given a list of strings (that are an encoding for a number), formats them with proper
+        capitalization and spacing.
+        '''
+        result = ''
+        is_sentence_start = True
+        for i, word in enumerate(encoding):
+            if is_sentence_start:
+                result += word.capitalize()
+                is_sentence_start = False
+            else:
+                result += word
+            if not any(c.isalpha() for c in word):
+                # we assume a punctuation mark indicates the end of the sentence
+                is_sentence_start = True
+            # add a space only if the next word is not punctuation
+            if i + 1 < len(encoding) and any(c.isalpha() for c in encoding[i + 1]):
+                result += ' '
+        return result
+
     def decode_words(self, words):
         '''
         Decodes the given list of words as a number (string of digits).
@@ -414,6 +435,8 @@ class NgramContextEncoder(ContextEncoder):
         '''
         Selects the most common encoding according to n-gram probabilities.
         '''
+        if len(encodings) == 0:
+            return None
         if self.select_most_likely:
             max_prob = -float('inf')
             max_prob_encoding = None
