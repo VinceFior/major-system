@@ -700,11 +700,14 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         probs = []
         total_prob = 0
         for template in self.templates:
-            template_prob = template[1] * pow(len(template[0]), 2)
+            template_prob = template[1]
             probs += [template_prob]
             total_prob += template_prob
         probs_norm = [prob / total_prob for prob in probs]
         template_sentences = [t[0] for t in self.templates]
+        # choice only works with multiple items, so we manually check if there is only one template
+        if len(template_sentences) == 1:
+            return template_sentences[0]
         sentence_template = choice(template_sentences, p = probs_norm)
         return sentence_template
 
@@ -773,7 +776,6 @@ class SentenceTaggerEncoder(NgramContextEncoder):
             # select the best encoding from chunk_encodings
             context = tuple(encodings[len(encodings) - context_length : len(encodings)])
             # note: we could improve the context by adding a post_context (i.e., a period at end)
-            # note: we should probably have an NgramEvaluator, not be an NgramContextEncoder
             chunk_encoding = self._select_encoding(context, list(chunk_encodings))
             
             if chunk_encoding != None:
