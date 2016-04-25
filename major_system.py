@@ -118,13 +118,17 @@ def main():
     pe = ParserEncoder(pronouncer = pronouncer, evaluator = NgramEvaluator(2))
     ste = SentenceTaggerEncoder(pronouncer = pronouncer)
     print('Models initialized.')
-    for number in ['123456789', '0987654321', '3141592653']:
+    for number in ['123456789', '0987654321', '3141592653',
+        '31415926535897932384626433832795028841971693993751']:
         print()
         for encoder in [rge, uge, nce, npce, pe, ste]:
+            # the ParserEncoder takes too long to encode long numbers
+            if encoder == pe and len(number) > 10:
+                continue
             encoding = encoder.encode_number(number)
             perplexity = evaluator.perplexity(encoding)
             print('{0} encoding for \'{1}\' has perplexity {2:.0f}: {3}'.format(
-                encoder, number, perplexity, encoding))
+                encoder, number, perplexity, encoder.format_encoding(encoding)))
 
 
 if __name__ == "__main__":
