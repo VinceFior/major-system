@@ -650,9 +650,14 @@ class SentenceTaggerEncoder(NgramContextEncoder):
     def __init__(self, pronouncer = Pronouncer(), phoneme_to_digit_dict = None,
         max_word_length = None, min_sentence_length = 5, n = 3, alpha = 0.1,
         select_most_likely = True, tagger_type = UnigramTagger, 
-        tagged_sents = brown.tagged_sents(tagset='universal'), num_sentence_templates = 100):
+        tagged_sents = brown.tagged_sents(tagset='universal'), num_sentence_templates = 100,
+        word_length_weight = 10):
         '''
         Initializes the SentenceTaggerEncoder.
+        Uses the num_sentence_templates most common part-of-speech sentence types, requiring at
+        least min_sentence_length words per sentence. Favors words that encode more digits as a
+        function of word_length_weight (0 means unweighted). Scores words and sentences through an
+        n-gram model with the given n and alpha.
         '''
         super(SentenceTaggerEncoder, self).__init__(pronouncer = pronouncer,
             phoneme_to_digit_dict = phoneme_to_digit_dict, max_word_length = max_word_length,
@@ -666,6 +671,7 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         # some parts of speech can be reasonably omitted from any sentence - we call these optional
         self.optional_tags = ['DET', 'ADJ', 'ADV']
         self.templates = self._get_sentence_templates()
+        self.word_length_weight = word_length_weight
 
     def _get_sentence_templates(self):
         '''
@@ -711,7 +717,35 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         sentence_template = choice(template_sentences, p = probs_norm)
         return sentence_template
 
-    def encode_number(self, number, max_word_length = None, context_length = None, num_times = 5,
+    def _select_encoding(self, previous_words, encodings):
+        '''
+        Selects the most common encoding according to n-gram probabilities, weighted toward the
+        encoding that encodes the most digits by self.word_length_weight (0 is unweighted).
+        '''
+        if len(encodings) == 0:
+            return None
+        elif len(encodings) == 1:
+            return encodings[0]
+        word_length_weight = self.word_length_weight
+        if self.select_most_likely:
+            max_prob = -float('inf')
+            max_prob_encoding = None
+            for encoding in encodings:
+                prob = exp(self.ngram.prob(previous_words, encoding))
+                weighted_prob = prob * pow(len(self.decode_word(encoding)), word_length_weight)
+                if weighted_prob > max_prob:
+                    max_prob = weighted_prob
+                    max_prob_encoding = encoding
+            return max_prob_encoding
+        else:
+            probabilities = [exp(self.ngram.prob(previous_words, encoding)) *
+                             pow(len(self.decode_word(encoding)), word_length_weight)
+                             for encoding in encodings]
+            probability_sum = sum(probabilities)
+            probabilities_norm = [probability / probability_sum for probability in probabilities]
+            return choice(encodings, p = probabilities_norm)
+
+    def encode_number(self, number, max_word_length = None, context_length = None, num_times = 1,
         evaluator = None):
         '''
         Generates num_times encodings and returns the encoding with the lowest perplexity according
