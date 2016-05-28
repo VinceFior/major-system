@@ -798,8 +798,12 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                 # if we successfully matched a sentence, we can sample from all templates
                 if sentence_template != None:
                     templates = deepcopy(self.sentence_templates)
-                sentence_template, sentence_template_index = self._get_sentence_template(templates)
-                del templates[sentence_template_index] # since we've used this template, remove it
+                if len(templates) > 0:
+                    sentence_template, sentence_template_index = self._get_sentence_template(templates)
+                    del templates[sentence_template_index] # since we've used this template, remove it
+                else:
+                    # if we run out of sentence templates, we will accept any single word
+                    sentence_template = ['*']
                 sentence_index = 0
                 if len(encodings) != 0:
                     encodings += ['.']
@@ -816,8 +820,12 @@ class SentenceTaggerEncoder(NgramContextEncoder):
             # if the pos_tag is a pronoun, we allow a noun instead
             if pos_tag == 'PRON':
                 pos_tags += ['NOUN']
-            chunk_encodings = [encoding for encoding in chunk_encodings
-                               if self.tagger.tag([encoding])[0][1] in pos_tags]
+            if pos_tag == '*':
+                # if the pos_tag is a wildcard, we allow any part of speech
+                chunk_encodings = [encoding for encoding in chunk_encodings]
+            else:
+                chunk_encodings = [encoding for encoding in chunk_encodings
+                                   if self.tagger.tag([encoding])[0][1] in pos_tags]
             # select the best encoding from chunk_encodings
             context = tuple(encodings[len(encodings) - context_length : len(encodings)])
             # note: we could improve the context by adding a post_context (i.e., a period at end)
