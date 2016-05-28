@@ -14,6 +14,7 @@ from ngram_model import NgramPOSModel # for NgramPOSContextEncoder
 from stat_parser import Parser # for ParserEncoder
 from ngram_evaluator import NgramEvaluator # for ParserEncoder
 from nltk.tag import UnigramTagger # for SentenceTaggerEncoder
+from copy import deepcopy # for SentenceTaggerEncoder
 
 class NumberEncoder(object):
     '''
@@ -670,7 +671,7 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         self.num_sentence_templates = num_sentence_templates
         # some parts of speech can be reasonably omitted from any sentence - we call these optional
         self.optional_tags = ['DET', 'ADJ', 'ADV']
-        self.templates = self._get_sentence_templates()
+        self.sentence_templates = self._get_sentence_templates()
         self.word_length_weight = word_length_weight
 
     def _get_sentence_templates(self):
@@ -699,23 +700,24 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         templates = Counter(sent_tags_filtered).most_common(self.num_sentence_templates)
         return templates
 
-    def _get_sentence_template(self):
+    def _get_sentence_template(self, templates):
         '''
-        Randomly selects a sentence template (a tuple of POS tags) from self.templates.
+        Randomly selects a sentence template (a tuple of POS tags) from the given templates.
+        Returns a tuple containing the template and its index.
         '''
         probs = []
         total_prob = 0
-        for template in self.templates:
+        for template in templates:
             template_prob = template[1]
             probs += [template_prob]
             total_prob += template_prob
         probs_norm = [prob / total_prob for prob in probs]
-        template_sentences = [t[0] for t in self.templates]
+        template_sentences = [t[0] for t in templates]
         # choice only works with multiple items, so we manually check if there is only one template
         if len(template_sentences) == 1:
-            return template_sentences[0]
-        sentence_template = choice(template_sentences, p = probs_norm)
-        return sentence_template
+            return (template_sentences[0], 0)
+        sentence_template_index = choice(len(template_sentences), p = probs_norm)
+        return (template_sentences[sentence_template_index], sentence_template_index)
 
     def _select_encoding(self, previous_words, encodings):
         '''
@@ -758,12 +760,16 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         for i in range(num_times):
             encoding = self.encode_number_once(number, max_word_length, context_length)
             encodings += [encoding]
-        # determine encoding with the lowest perplexity
+        # if there is only one encoding, don't bother evaluating it
+        if len(encodings) == 1:
+            return encodings[0]
+        # determine encoding with the lowest perplexity - note that all perplexities might be
+        # infinite if the encoding is long
         min_perplexity = float('inf')
         min_perplexity_encoding = None
         for encoding in encodings:
             perplexity = evaluator.perplexity(encoding)
-            if perplexity < min_perplexity:
+            if perplexity <= min_perplexity:
                 min_perplexity = perplexity
                 min_perplexity_encoding = encoding
         return min_perplexity_encoding
@@ -786,9 +792,11 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         encoded_index = 0 # the last index of number we've encoded, inclusive
         encodings = []
         sentence_template = None
+        templates = deepcopy(self.sentence_templates)
         while encoded_index < len(number):
             if (sentence_template == None) or (sentence_index == len(sentence_template) - 1):
-                sentence_template = self._get_sentence_template()
+                sentence_template, sentence_template_index = self._get_sentence_template(templates)
+                del templates[sentence_template_index] # since we've used this template, remove it
                 sentence_index = 0
                 if len(encodings) != 0:
                     encodings += ['.']
@@ -816,6 +824,7 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                 encodings += [chunk_encoding]
                 # increment encoded_index based on the chosen chunk_encoding
                 encoded_index += len(self.decode_word(chunk_encoding))
+                templates = deepcopy(self.sentence_templates)
             elif pos_tag not in self.optional_tags:
                 # if none of the chunk_encodings matches the needed pos_tag, remove all encodings
                 # used in the current sentence and select a (hopefully) new sentence template
