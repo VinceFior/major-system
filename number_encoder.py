@@ -795,6 +795,9 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         templates = deepcopy(self.sentence_templates)
         while encoded_index < len(number):
             if (sentence_template == None) or (sentence_index == len(sentence_template) - 1):
+                # if we successfully matched a sentence, we can sample from all templates
+                if sentence_template != None:
+                    templates = deepcopy(self.sentence_templates)
                 sentence_template, sentence_template_index = self._get_sentence_template(templates)
                 del templates[sentence_template_index] # since we've used this template, remove it
                 sentence_index = 0
@@ -824,7 +827,6 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                 encodings += [chunk_encoding]
                 # increment encoded_index based on the chosen chunk_encoding
                 encoded_index += len(self.decode_word(chunk_encoding))
-                templates = deepcopy(self.sentence_templates)
             elif pos_tag not in self.optional_tags:
                 # if none of the chunk_encodings matches the needed pos_tag, remove all encodings
                 # used in the current sentence and select a (hopefully) new sentence template
