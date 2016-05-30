@@ -52,5 +52,8 @@ class NgramEvaluator(object):
         '''
         log_prob = self.score(phrase)
         prob = pow(e, log_prob)
+        # if the log_prob is low enough, prob will be 0.0, which causes a ZeroDivisionError
+        if prob == 0:
+            return float('inf')
         perplexity = pow(prob, -1 / len(phrase))
         return perplexity
