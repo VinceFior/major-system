@@ -672,6 +672,8 @@ class SentenceTaggerEncoder(NgramContextEncoder):
         self.optional_tags = ['DET', 'ADJ', 'ADV']
         self.templates = self._get_sentence_templates()
         self.word_length_weight = word_length_weight
+        # set up bigram model for post processing
+        self.bigram = NgramModel(n = 2, alpha = 0.05)
 
     def _get_sentence_templates(self):
         '''
@@ -830,4 +832,57 @@ class SentenceTaggerEncoder(NgramContextEncoder):
                     partial_sentence_len = len(self.decode_words(partial_sentence))
                     encoded_index -= partial_sentence_len
         encodings += ['.']
+
+        encodings = self._post_process(encodings)
+
         return encodings
+
+    def _post_process(self, encodings):
+        '''
+        Takes a set of encodings (series of words). For each encoding, produces all possible
+        alternatives that encode the same sequence of digits and replaces the original encoding if
+        an alternative encoding has a higher score, which is calculated as the sum of the bigram
+        probabilities with the preceding and following encodings (where available). Ties are broken
+        in favor of the original encoding.
+        '''
+        # if there are fewer than two encodings, there is no context available for post processing
+        if len(encodings) < 2:
+            return encodings
+
+        # otherwise, score all possible alternatives for each encoding using bigram probabilities
+        # with the preceding and following encodings (where available) and replace the original
+        # encoding if a higher scoring encoding is found
+        new_encodings = []
+        for index, encoding in enumerate(encodings):
+            decoding = self.decode_word(encoding) # string of digits
+            # if the encoding doesn't actually encode any numbers (i.e. we have a punctuation 
+            # mark), don't attempt to replace
+            if len(decoding) == 0:
+                new_encodings += [encoding]
+                continue
+            possible_encodings = self._encode_number_chunk(decoding)
+            # default to the original encoding if multiple encodings have this probability
+            if index == 0: # first encoding, no previous context
+                max_prob = self.bigram.prob((encoding,), encodings[index + 1])
+            elif index == len(encodings) - 1: # last encoding, no next context
+                max_prob = self.bigram.prob((encodings[index - 1],), encoding)
+            else: # middle encoding, both previous and next contexts
+                prev_prob = self.bigram.prob((encodings[index - 1],), encoding)
+                next_prob = self.bigram.prob((encoding,), encodings[index + 1])
+                max_prob = prev_prob + next_prob
+            max_prob_encoding = encoding
+            # score all possible alternatives
+            for pos_encoding in possible_encodings:
+                if index == 0: # first encoding, no previous context
+                    prob = self.bigram.prob((pos_encoding,), encodings[index + 1])
+                elif index == len(encodings) - 1: # last encoding, no next context
+                    prob = self.bigram.prob((encodings[index - 1],), pos_encoding)
+                else: # middle encodings, both previous and next contexts
+                    prev_prob = self.bigram.prob((encodings[index - 1],), pos_encoding)
+                    next_prob = self.bigram.prob((pos_encoding,), encodings[index + 1])
+                    prob = prev_prob + next_prob
+                if prob > max_prob:
+                    max_prob = prob
+                    max_prob_encoding = pos_encoding
+            new_encodings += [max_prob_encoding]
+        return new_encodings

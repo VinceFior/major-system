@@ -49,6 +49,14 @@ class NgramBase(object):
         Returns the log probability of the element given the context. The context should be a tuple 
         with no more than n - 1 elements.
         '''
+        if self.alpha == 0:
+            count = self.grams[0][context][element]
+            if count != 0:
+                prob = count / self.grams[0][context].N()
+                return log(prob)
+            else:
+                return -float('inf')
+
         context = tuple([token.lower() for token in context])
         element = element.lower()
         for index, gram in enumerate(self.grams[-len(context) - 1:]):
